@@ -1,18 +1,8 @@
 import eventlet
 import socketio
+import configparser
 import time
 
-# Settings
-
-allowWatch = False
-videoURL = ""
-
-# SSL
-certfile = ""
-privkey = ""
-# SSL
-
-# Settings
 
 lastState = 0 # 0 - not init (0 sec and pause), 1 - pause, 2 - play
 lastPlayed = 0
@@ -99,4 +89,24 @@ def disconnect(sid):
 	print('disconnect ', sid)
 
 if __name__ == '__main__':
-	eventlet.wsgi.server(eventlet.wrap_ssl(eventlet.listen(('', 62341)), certfile=certfile, keyfile=privkey, server_side=True), app)
+	config = configparser.ConfigParser()
+	config.read("settings.ini")
+
+	videoURL = config.get("general", "videoURL")
+	allowWatch = False
+	if config.get("general", "allowWatch") == "yes":
+		allowWatch = True
+
+	useSSL = True
+	if config.get("ssl", "enable") == "no":
+		useSSL = False
+
+	certfile = config.get("ssl", "certfile")
+	privkey = config.get("ssl", "privkey")
+
+	port = int(config.get('socket', 'port'))
+
+	if useSSL == True:
+		eventlet.wsgi.server(eventlet.wrap_ssl(eventlet.listen(('', port)), certfile=certfile, keyfile=privkey, server_side=True), app)
+	else:
+		eventlet.wsgi.server(eventlet.listen(('', port)), app)
