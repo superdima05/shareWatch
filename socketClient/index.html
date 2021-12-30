@@ -2,10 +2,11 @@
 <html>
 <head>
 	<title>Share watch</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<script src="socket.io.min.js"></script>
 </head>
 <body>
-	<video controls id="videoMain"></video>
+	<video controls id="videoMain" width="1280" height="720"></video>
 	<div id="sessionData"></div>
 
 	<script type="text/javascript">
@@ -14,13 +15,20 @@
 
 		let socketB = false;
 		let interval;
+		var wasBuffering = false;
 
-		const socket = io("https://DOMAIN_NAME:62341");
+		const socket = io("http://DOMAIN_NAME:62341");
 
 		socket.on("connect", () => {  
 			div.innerText = "connection ok"; 
 			socket.emit("video");
 			interval = setInterval(checkState, 4000)
+		});
+
+		socket.on("newInfo", () => {
+			div.innerText = "new info";
+			video.src = "";
+			socket.emit("video");
 		});
 
 		socket.on("disconnect", () => {  
@@ -35,7 +43,7 @@
 		});
 
 		socket.on("message", (v) => { 
-			div.innerText = v
+			div.innerText = "connection ok. msg from server: "+v
 		});
 
 		socket.on("state", (v) => {
@@ -96,8 +104,19 @@
 		};
 
 		video.addEventListener('waiting', (event) => {
-			socket.emit("setState", 1);
-			socketB = false
+			socket.emit("buffering", 1);
+			socketB = false;
+			wasBuffering = true;
+		});
+
+		video.addEventListener('playing', (event) => {
+			if(wasBuffering == true){
+				socket.emit("buffering", 0);
+				socketB = false;
+				wasBuffering = false;
+
+				video.play();
+			}
 		});
 
 

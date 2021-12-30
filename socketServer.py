@@ -2,6 +2,8 @@ import eventlet
 import socketio
 import configparser
 import time
+import threading
+import os
 
 
 lastState = 0 # 0 - not init (0 sec and pause), 1 - pause, 2 - play
@@ -23,12 +25,11 @@ def video(sid):
 	if allowWatch == True:
 		sio.emit("video", videoURL, room=sid)
 	else:
-		sio.emit("message", "Please wait for administrator to start movie.", room=sid)
+		sio.emit("message", "Please wait till the administrator starts the movie.", room=sid)
 
 @sio.event
 def state(sid):
 	global lastState
-	print("send state")
 	sio.emit("state", lastState, room=sid)
 
 @sio.event
@@ -40,14 +41,11 @@ def progress(sid):
 	if lastPaused != 0:
 		progressNow = int(lastPaused - lastPlayed)
 
-	print("send progress", progressNow)
 	sio.emit("time", progressNow, room=sid)
 
 @sio.event
 def setState(sid, state):
 	global lastState, lastPlayed, lastPaused, pausedIndex
-
-	print("got state", state)
 
 	if lastState == 0 and state != 0:
 		lastPlayed = time.time()
@@ -64,6 +62,30 @@ def setState(sid, state):
 		lastPaused = time.time()
 
 	sio.emit("state", lastState, broadcast=True, include_self=False)
+
+@sio.event
+def buffering(sid, start):
+	global lastState, lastPlayed, lastPaused, pausedIndex
+
+	if int(start) == 1:
+		lastState = 1
+		sio.emit("message", "Buffering", broadcast=True, include_self=False)
+	if int(start) == 0:
+		lastState = 2
+		sio.emit("message", "Playing", broadcast=True, include_self=False)
+
+	if lastState == 2:
+		pausedIndex = 0
+		if lastPaused != 0:
+			pausedIndex = pausedIndex + (time.time() - lastPaused)
+		lastPlayed = lastPlayed + pausedIndex
+		lastPaused = 0
+
+	if lastState == 1:
+		lastPaused = time.time()
+
+	sio.emit("state", lastState, broadcast=True, include_self=False)
+
 
 @sio.event
 def setTime(sid, timeS):
@@ -88,7 +110,19 @@ def setTime(sid, timeS):
 def disconnect(sid):
 	print('disconnect ', sid)
 
-if __name__ == '__main__':
+def watchdog():
+	global initStamp, sio
+	while True:
+		if os.stat("settings.ini").st_mtime != initStamp:
+			print("read")
+			readConfig()
+			sio.emit("newInfo", broadcast = True)
+			initStamp = os.stat("settings.ini").st_mtime
+		time.sleep(.5)
+
+
+def readConfig():
+	global videoURL, allowWatch, useSSL, certfile, privkey, port
 	config = configparser.ConfigParser()
 	config.read("settings.ini")
 
@@ -105,6 +139,22 @@ if __name__ == '__main__':
 	privkey = config.get("ssl", "privkey")
 
 	port = int(config.get('socket', 'port'))
+
+if __name__ == '__main__':
+
+	initStamp = 0
+	videoURL = None
+	allowWatch = False
+	useSSL = False
+	certfile = None
+	privkey = None
+	port = 0
+
+	initStamp = os.stat("settings.ini").st_mtime
+	readConfig()
+
+	eventlet.monkey_patch()
+	eventlet.spawn(watchdog)
 
 	if useSSL == True:
 		eventlet.wsgi.server(eventlet.wrap_ssl(eventlet.listen(('', port)), certfile=certfile, keyfile=privkey, server_side=True), app)
