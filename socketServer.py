@@ -34,12 +34,15 @@ def state(sid):
 
 @sio.event
 def progress(sid):
-	global lastPlayed, lastPaused
+	global lastPlayed, lastPaused, lastState
 
 	if lastPaused == 0:
 		progressNow = int(time.time() - lastPlayed)
 	if lastPaused != 0:
 		progressNow = int(lastPaused - lastPlayed)
+
+	if lastState == 0:
+		progressNow = 0
 
 	sio.emit("time", progressNow, room=sid)
 
@@ -111,11 +114,19 @@ def disconnect(sid):
 	print('disconnect ', sid)
 
 def watchdog():
-	global initStamp, sio
+	global initStamp, sio, videoURL, allowWatch, lastState, lastPlayed, lastPaused, pausedIndex
 	while True:
 		if os.stat("settings.ini").st_mtime != initStamp:
-			print("read")
+			oldVideo = videoURL
+			oldAllowed = allowWatch		
+
 			readConfig()
+			if oldVideo != videoURL or oldAllowed != allowWatch:
+				lastPlayed = 0
+				lastState = 0
+				lastPaused = 0
+				pausedIndex = 0
+
 			sio.emit("newInfo", broadcast = True)
 			initStamp = os.stat("settings.ini").st_mtime
 		time.sleep(.5)
