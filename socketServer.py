@@ -24,6 +24,7 @@ def connect(sid, environ):
 def video(sid):
 	if allowWatch == True:
 		sio.emit("video", videoURL, room=sid)
+		sio.emit("audio", audioURL, room=sid)
 	else:
 		sio.emit("message", "Please wait till the administrator starts the movie.", room=sid)
 
@@ -133,11 +134,12 @@ def watchdog():
 
 
 def readConfig():
-	global videoURL, allowWatch, useSSL, certfile, privkey, port
+	global audioURL, videoURL, allowWatch, useSSL, certfile, privkey, port
 	config = configparser.ConfigParser()
 	config.read("settings.ini")
 
 	videoURL = config.get("general", "videoURL")
+	audioURL = config.get('general', 'audioURL')
 	allowWatch = False
 	if config.get("general", "allowWatch") == "yes":
 		allowWatch = True
@@ -155,6 +157,7 @@ if __name__ == '__main__':
 
 	initStamp = 0
 	videoURL = None
+	audioURL = None
 	allowWatch = False
 	useSSL = False
 	certfile = None

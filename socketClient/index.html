@@ -7,17 +7,33 @@
 </head>
 <body>
 	<video controls id="videoMain" width="1280" height="720"></video>
+	<audio id="audioMain"></audio>
 	<div id="sessionData"></div>
+
+	<input type="range" min="1" max="100" value="50" id="volume">
 
 	<script type="text/javascript">
 		let div = document.getElementById("sessionData");
 		let video = document.getElementById("videoMain");
+		let audio = document.getElementById("audioMain");
+		let volume = document.getElementById("volume");
 
 		let socketB = false;
 		let interval;
 		var wasBuffering = false;
 
+		volume.value = remapVolume(audio.volume);
+
 		const socket = io("http://DOMAIN_NAME:62341");
+
+		function volumeRemap(value){
+			let v = 0 + (value - 0) * (1 - 0) / (100 - 0);
+			return v;
+		}
+		function remapVolume(value){
+			let v = 0 + (value - 0) * (100 - 0) / (1 - 0)
+			return v;
+		}
 
 		socket.on("connect", () => {  
 			div.innerText = "connection ok"; 
@@ -41,6 +57,10 @@
 			video.src = v;
 			socket.emit("state")
 		});
+
+		socket.on("audio", (a) => {
+			audio.src = a;
+		})
 
 		socket.on("message", (v) => { 
 			div.innerText = "connection ok. msg from server: "+v
@@ -88,6 +108,9 @@
 		};
 
 		video.onplay = (event) => {
+			if(audio.src != ""){
+				audio.play();
+			}
 			console.log(socketB);
 		  	if(socketB == false){
 		  		socket.emit("setState", 2)
@@ -96,11 +119,20 @@
 		};
 
 		video.onpause = (event) => {
+			if(audio.src != ""){
+				audio.pause();
+			}
 			console.log(socketB);
 		  	if(socketB == false){
 		  		socket.emit("setState", 1)
 			}
 			socketB = false
+		};
+
+		video.ontimeupdate = (event) => {
+		  if(Math.abs(video.currentTime - audio.currentTime) >= 0.09){
+		  	audio.currentTime = video.currentTime;
+		  }
 		};
 
 		video.addEventListener('waiting', (event) => {
@@ -118,6 +150,10 @@
 				video.play();
 			}
 		});
+
+		volume.onchange = (event) => {
+			audio.volume = volumeRemap(volume.value);
+		}
 
 
 		function checkState(){
