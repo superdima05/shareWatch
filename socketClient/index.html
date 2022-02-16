@@ -11,12 +11,17 @@
 	<div id="sessionData"></div>
 
 	<input type="range" min="1" max="100" value="50" id="volume">
+	<select name="formats" id="formats">
 
 	<script type="text/javascript">
 		let div = document.getElementById("sessionData");
 		let video = document.getElementById("videoMain");
 		let audio = document.getElementById("audioMain");
 		let volume = document.getElementById("volume");
+		let select = document.getElementById("formats")
+
+		let formats = {};
+		let defaultFormat = "";
 
 		let socketB = false;
 		let interval;
@@ -24,7 +29,7 @@
 
 		volume.value = remapVolume(audio.volume);
 
-		const socket = io("http://DOMAIN_NAME:62341");
+		const socket = io("https://DOMAIN_NAME:62341");
 
 		function volumeRemap(value){
 			let v = 0 + (value - 0) * (1 - 0) / (100 - 0);
@@ -60,6 +65,42 @@
 
 		socket.on("audio", (a) => {
 			audio.src = a;
+		})
+
+		function removeAllChildNodes(parent) {
+		    while (parent.firstChild) {
+		        parent.removeChild(parent.firstChild);
+		    }
+		}
+
+		socket.on("youtube", (a) => {
+			div.innerText = "got youtube formats";
+			formats = a;
+
+			removeAllChildNodes(select)
+
+			for (var i = 0; i <= Object.entries(formats).length; i++){
+				let temp = Object.entries(formats)[i];
+
+			    var opt = document.createElement('option');
+			    opt.value = temp[0];
+			    opt.innerHTML = temp[0];
+			    select.appendChild(opt);
+			}
+		})
+
+		select.onchange = function(){
+			video.src = formats[select.value]
+			socket.emit("state");
+		}; 
+
+		socket.on("youtubeFormat", (a) => {
+			div.innerText = "got youtube default";
+			defaultFormat = a
+			select.value = a
+			video.src = formats[defaultFormat]
+
+			socket.emit("state");
 		})
 
 		socket.on("message", (v) => { 
@@ -139,6 +180,7 @@
 			socket.emit("buffering", 1);
 			socketB = false;
 			wasBuffering = true;
+			audio.pause();
 		});
 
 		video.addEventListener('playing', (event) => {
@@ -148,6 +190,7 @@
 				wasBuffering = false;
 
 				video.play();
+				audio.play();
 			}
 		});
 

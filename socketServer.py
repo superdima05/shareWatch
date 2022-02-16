@@ -1,10 +1,11 @@
+import youtube_dl as ytdl
+from urllib.parse import unquote
 import eventlet
 import socketio
 import configparser
 import time
 import threading
 import os
-
 
 lastState = 0 # 0 - not init (0 sec and pause), 1 - pause, 2 - play
 lastPlayed = 0
@@ -23,8 +24,12 @@ def connect(sid, environ):
 @sio.event
 def video(sid):
 	if allowWatch == True:
-		sio.emit("video", videoURL, room=sid)
-		sio.emit("audio", audioURL, room=sid)
+		if videoURL != "":
+			sio.emit("video", videoURL, room = sid)
+		sio.emit("audio", audioURL, room = sid)
+		if youtubeURL != "":
+			sio.emit("youtube", formats, room = sid)
+			sio.emit("youtubeFormat", defaultFormat, room = sid)
 	else:
 		sio.emit("message", "Please wait till the administrator starts the movie.", room=sid)
 
@@ -95,7 +100,6 @@ def buffering(sid, start):
 def setTime(sid, timeS):
 	global lastPlayed, lastPaused
 
-	print(timeS)
 	if int(timeS) == 0:
 		lastPlayed = time.time()
 		sio.emit("time", 0, broadcast=True, include_self=False)
@@ -115,14 +119,15 @@ def disconnect(sid):
 	print('disconnect ', sid)
 
 def watchdog():
-	global initStamp, sio, videoURL, allowWatch, lastState, lastPlayed, lastPaused, pausedIndex
+	global initStamp, sio, videoURL, youtubeURL, allowWatch, lastState, lastPlayed, lastPaused, pausedIndex
 	while True:
 		if os.stat("settings.ini").st_mtime != initStamp:
 			oldVideo = videoURL
-			oldAllowed = allowWatch		
+			oldAllowed = allowWatch
+			oldYoutube = youtubeURL		
 
 			readConfig()
-			if oldVideo != videoURL or oldAllowed != allowWatch:
+			if oldVideo != videoURL or oldAllowed != allowWatch or oldYoutube != youtubeURL:
 				lastPlayed = 0
 				lastState = 0
 				lastPaused = 0
@@ -132,14 +137,54 @@ def watchdog():
 			initStamp = os.stat("settings.ini").st_mtime
 		time.sleep(.5)
 
+def parseYoutube(url):
+	global audioURL, formats, defaultFormat
+
+	defaultFormat = "1080p (FHD)"
+	formats = {
+		"720p (HD)": None,
+		"1080p (FHD)": None,
+		"1440p (2K)": None,
+		"2160p (4K)": None
+	}
+
+	yt = ytdl.YoutubeDL()
+	try:
+		_formats = yt.extract_info(url, download = False)['formats']
+		for i in _formats:
+			if i['acodec'] == "none":
+				if i['ext'] == "webm":
+					for x in formats.keys():
+						if i['format_note'] in x:
+							formats[x] = unquote(i['url'])
+			else:
+				if i['vcodec'] == "none" and i['ext'] == "m4a":
+					audioURL = unquote(i['url'])
+
+		if formats[defaultFormat] == None:
+			print("drop default")
+			defaultFormat = "720p (HD)"
+
+		for i in formats.copy().keys():
+			if formats[i] == None:
+				del formats[i]
+	except Exception as e:
+		raise ValueError("invalid url")
 
 def readConfig():
-	global audioURL, videoURL, allowWatch, useSSL, certfile, privkey, port
+	global audioURL, videoURL, youtubeURL, allowWatch, useSSL, certfile, privkey, port
 	config = configparser.ConfigParser()
 	config.read("settings.ini")
 
 	videoURL = config.get("general", "videoURL")
 	audioURL = config.get('general', 'audioURL')
+	youtubeURL = config.get('general', 'youtubeURL')
+
+	if youtubeURL != "":
+		videoURL = ""
+		audioURL = ""
+		parseYoutube(youtubeURL)
+
 	allowWatch = False
 	if config.get("general", "allowWatch") == "yes":
 		allowWatch = True
@@ -155,9 +200,20 @@ def readConfig():
 
 if __name__ == '__main__':
 
+
+	defaultFormat = "1080p (FHD)"
+	formats = {
+		"720p (HD)": None,
+		"1080p (FHD)": None,
+		"1440p (2K)": None,
+		"2160p (4K)": None
+	}
+
 	initStamp = 0
 	videoURL = None
 	audioURL = None
+	youtubeURL = None
+
 	allowWatch = False
 	useSSL = False
 	certfile = None
