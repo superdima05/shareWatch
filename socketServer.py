@@ -155,7 +155,7 @@ def parseYoutube(url):
 			if i['acodec'] == "none":
 				if i['ext'] == "webm":
 					for x in formats.keys():
-						if i['format_note'] in x:
+						if i['format_note'].replace("60", "") in x:
 							formats[x] = unquote(i['url'])
 			else:
 				if i['vcodec'] == "none" and i['ext'] == "m4a":
